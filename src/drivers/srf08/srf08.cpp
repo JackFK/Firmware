@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013-2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2017 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,10 +33,10 @@
 
 /**
  * @file srf08.cpp
- * @author Greg Hulands
- * @author Jon Verbeke <jon.verbeke@kuleuven.be>
+ * @author Florian Kock <florian-kock@gmx.de>
  *
- * Driver for the Maxbotix sonar range finders connected via I2C.
+ * Driver for the Devantech SRF08 UltraSonic Ranger connected via I2C.
+ * initially based on file srf02_i2c.cpp and mb12xx.cpp
  */
 
 #include <px4_config.h>
@@ -78,7 +78,8 @@
 #define SRF08_BUS 		PX4_I2C_BUS_EXPANSION
 #define SRF08_BASEADDR 	0x70 /* 7-bit address. 8-bit address is 0xE0 */
 #define SRF08_DEVICE_PATH	"/dev/srf08"
-#define SRF08_MAX_RANGEFINDERS	2	// Maximum number of SRF08 sensors on bus
+#define SRF08_MAX_RANGEFINDERS	1	// Maximum number of SRF08 sensors on bus
+// sadly i just have one of them
 
 /* SRF08 Registers addresses */
 #define SRF08_COMMAND_REG 0x0

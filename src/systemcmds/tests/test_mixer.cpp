@@ -75,7 +75,7 @@ const unsigned output_max = 8;
 static float actuator_controls[output_max];
 static bool should_prearm = false;
 
-#define NAN_VALUE 0.0f/0.0f
+#define NAN_VALUE (0.0f/0.0f)
 
 #ifdef __PX4_DARWIN
 #define MIXER_DIFFERENCE_THRESHOLD 30
@@ -105,7 +105,7 @@ static bool should_prearm = false;
 class MixerTest : public UnitTest
 {
 public:
-	virtual bool run_tests(void);
+	virtual bool run_tests();
 	MixerTest();
 
 private:
@@ -123,12 +123,12 @@ private:
 	MixerGroup mixer_group;
 };
 
-MixerTest::MixerTest() : UnitTest(),
+MixerTest::MixerTest() :
 	mixer_group(mixer_callback, 0)
 {
 }
 
-bool MixerTest::run_tests(void)
+bool MixerTest::run_tests()
 {
 	ut_run_test(loadIOPass);
 	ut_run_test(loadQuadTest);
@@ -399,7 +399,7 @@ bool MixerTest::mixerTest()
 
 	/* mix */
 	should_prearm = true;
-	mixed = mixer_group.mix(&outputs[0], output_max, NULL);
+	mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
 
 	pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 		       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -440,7 +440,7 @@ bool MixerTest::mixerTest()
 	while (hrt_elapsed_time(&starttime) < INIT_TIME_US + RAMP_TIME_US + 2 * sleep_quantum_us) {
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, NULL);
+		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -484,7 +484,7 @@ bool MixerTest::mixerTest()
 		}
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, NULL);
+		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -512,7 +512,7 @@ bool MixerTest::mixerTest()
 	while (hrt_elapsed_time(&starttime) < 600000) {
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, NULL);
+		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -549,7 +549,7 @@ bool MixerTest::mixerTest()
 	while (hrt_elapsed_time(&starttime) < 600000 + RAMP_TIME_US) {
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, NULL);
+		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);

@@ -70,7 +70,7 @@
 #include <arch/board/board.h>
 
 #include <drivers/drv_hrt.h>
-#include <drivers/drv_led.h>
+#include <drivers/drv_board_led.h>
 
 #include <systemlib/px4_macros.h>
 #include <systemlib/cpuload.h>
@@ -80,6 +80,7 @@
 #include <systemlib/hardfault_log.h>
 
 #include <systemlib/systemlib.h>
+#include <systemlib/param/param.h>
 
 /****************************************************************************
  * Pre-Processor Definitions
@@ -130,10 +131,12 @@ __END_DECLS
  ************************************************************************************/
 __EXPORT void board_peripheral_reset(int ms)
 {
-	/* set the peripheral rails off */
-	stm32_configgpio(GPIO_VDD_3V3_PERIPH_EN);
-
+	/* set the peripheral and sensor rails off */
 	stm32_gpiowrite(GPIO_VDD_3V3_PERIPH_EN, 0);
+	stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 0);
+	stm32_gpiowrite(GPIO_VDD_5V_PERIPH_EN, 1);
+	stm32_gpiowrite(GPIO_VDD_5V_HIPOWER_EN, 1);
+
 
 //	bool last = stm32_gpioread(GPIO_SPEKTRUM_PWR_EN);
 	/* Keep Spektum on to discharge rail*/
@@ -148,7 +151,9 @@ __EXPORT void board_peripheral_reset(int ms)
 	/* switch the peripheral rail back on */
 //	stm32_gpiowrite(GPIO_SPEKTRUM_PWR_EN, last);
 	stm32_gpiowrite(GPIO_VDD_3V3_PERIPH_EN, 1);
-
+	stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 1);
+	stm32_gpiowrite(GPIO_VDD_5V_PERIPH_EN, 0);
+	stm32_gpiowrite(GPIO_VDD_5V_HIPOWER_EN, 0);
 }
 
 /************************************************************************************
@@ -168,27 +173,31 @@ stm32_boardinitialize(void)
 	board_autoled_initialize();
 
 	/* configure ADC pins */
-	//todo:Revisit! ADC3 etc
 	stm32_configgpio(GPIO_ADC1_IN2);	/* BATT_VOLTAGE_SENS */
 	stm32_configgpio(GPIO_ADC1_IN3);	/* BATT_CURRENT_SENS */
 	stm32_configgpio(GPIO_ADC1_IN4);	/* VDD_5V_SENS */
-	stm32_configgpio(GPIO_ADC1_IN11);	/* RSSI analog in */
+	stm32_configgpio(GPIO_ADC1_IN11);	/* BATT2_VOLTAGE_SENS */
+	stm32_configgpio(GPIO_ADC1_IN13);	/* BATT2_CURRENT_SENS */
 
 	/* configure power supply control/sense pins */
 	stm32_configgpio(GPIO_VDD_3V3_PERIPH_EN);
+	stm32_configgpio(GPIO_VDD_3V3_SENSORS_EN);
+	stm32_configgpio(GPIO_VDD_5V_PERIPH_EN);
+	stm32_configgpio(GPIO_VDD_5V_HIPOWER_EN);
+
 	stm32_configgpio(GPIO_VDD_BRICK_VALID);
+	stm32_configgpio(GPIO_VDD_BRICK2_VALID);
+
+	stm32_configgpio(GPIO_VDD_5V_PERIPH_OC);
+	stm32_configgpio(GPIO_VDD_5V_HIPOWER_OC);
+	stm32_configgpio(GPIO_VBUS_VALID);
 
 	stm32_configgpio(GPIO_SBUS_INV);
 	stm32_configgpio(GPIO_8266_GPIO0);
 //	stm32_configgpio(GPIO_SPEKTRUM_PWR_EN);
 	stm32_configgpio(GPIO_8266_PD);
 	stm32_configgpio(GPIO_8266_RST);
-	stm32_configgpio(GPIO_BTN_SAFETY);
-
-#ifdef GPIO_RC_OUT
-	stm32_configgpio(GPIO_RC_OUT);      /* Serial RC output pin */
-	stm32_gpiowrite(GPIO_RC_OUT, 1);    /* set it high to pull RC input up */
-#endif
+	stm32_configgpio(GPIO_BTN_SAFETY_FMU);
 
 	/* configure the GPIO pins to outputs and keep them low */
 	stm32_configgpio(GPIO_GPIO0_OUTPUT);
@@ -255,6 +264,8 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 
 	/* configure the high-resolution time/callout interface */
 	hrt_init();
+
+	param_init();
 
 	/* configure the DMA allocator */
 
@@ -440,6 +451,7 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 	SPI_SELECT(spi1, PX4_SPIDEV_BARO, false);
 	SPI_SELECT(spi1, PX4_SPIDEV_LIS, false);
 	SPI_SELECT(spi1, PX4_SPIDEV_MPU, false);
+	SPI_SELECT(spi1, PX4_SPIDEV_EEPROM, false);
 	up_udelay(20);
 
 	/* Get the SPI port for the FRAM */

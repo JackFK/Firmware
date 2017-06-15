@@ -377,7 +377,7 @@ private:
 	bool			is_external()
 	{
 		unsigned dummy;
-		return !_interface->ioctl(ACCELIOCGEXTERNAL, dummy);
+		return _interface->ioctl(ACCELIOCGEXTERNAL, dummy);
 	}
 
 	/**
@@ -732,15 +732,20 @@ out:
 
 int MPU6000::reset()
 {
-	// if the mpu6000 is initialised after the l3gd20 and lsm303d
+	// if the mpu6000 is initialized after the l3gd20 and lsm303d
 	// then if we don't do an irqsave/irqrestore here the mpu6000
-	// frequenctly comes up in a bad state where all transfers
+	// frequently comes up in a bad state where all transfers
 	// come as zero
 	uint8_t tries = 5;
+	irqstate_t state;
+
+
 
 	while (--tries != 0) {
-		irqstate_t state;
 		state = px4_enter_critical_section();
+
+		// Hold off sampling for 60 ms
+		_reset_wait = hrt_absolute_time() + 60000;
 
 		write_reg(MPUREG_PWR_MGMT_1, BIT_H_RESET);
 		up_udelay(10000);
@@ -763,6 +768,12 @@ int MPU6000::reset()
 		perf_count(_reset_retries);
 		usleep(2000);
 	}
+
+	// Hold off sampling for 30 ms
+
+	state = px4_enter_critical_section();
+	_reset_wait = hrt_absolute_time() + 30000;
+	px4_leave_critical_section(state);
 
 	if (read_reg(MPUREG_PWR_MGMT_1) != MPU_CLK_SEL_PLLGYROZ) {
 		return -EIO;
@@ -796,7 +807,7 @@ int MPU6000::reset()
 	_gyro_range_scale = (0.0174532 / 16.4);//1.0f / (32768.0f * (2000.0f / 180.0f) * M_PI_F);
 	_gyro_range_rad_s = (2000.0f / 180.0f) * M_PI_F;
 
-	set_accel_range(8);
+	set_accel_range(MPU6000_ACCEL_DEFAULT_RANGE_G);
 
 	usleep(1000);
 
@@ -813,7 +824,6 @@ int MPU6000::reset()
 	// Oscillator set
 	// write_reg(MPUREG_PWR_MGMT_1,MPU_CLK_SEL_PLLGYROZ);
 	usleep(1000);
-
 	return OK;
 }
 
@@ -1052,31 +1062,6 @@ MPU6000::accel_self_test()
 		return 1;
 	}
 
-	/* inspect accel offsets */
-	if (fabsf(_accel_scale.x_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.x_scale - 1.0f) > 0.4f || fabsf(_accel_scale.x_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.y_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.y_scale - 1.0f) > 0.4f || fabsf(_accel_scale.y_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.z_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.z_scale - 1.0f) > 0.4f || fabsf(_accel_scale.z_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
 	return 0;
 }
 
@@ -1127,14 +1112,6 @@ MPU6000::gyro_self_test()
 	}
 
 	if (fabsf(_gyro_scale.z_scale - 1.0f) > max_scale) {
-		return 1;
-	}
-
-	/* check if all scales are zero */
-	if ((fabsf(_gyro_scale.x_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.y_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.z_offset) < 0.000001f)) {
-		/* if all are zero, this device is not calibrated */
 		return 1;
 	}
 
@@ -2253,6 +2230,7 @@ namespace mpu6000
 
 struct mpu6000_bus_option {
 	enum MPU6000_BUS busid;
+	MPU_DEVICE_TYPE device_type;
 	const char *accelpath;
 	const char *gyropath;
 	MPU6000_constructor interface_constructor;
@@ -2262,27 +2240,30 @@ struct mpu6000_bus_option {
 } bus_options[] = {
 #if defined (USE_I2C)
 #  if defined(PX4_I2C_BUS_ONBOARD)
-	{ MPU6000_BUS_I2C_INTERNAL, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO,  &MPU6000_I2C_interface, PX4_I2C_BUS_ONBOARD, false, NULL },
+	{ MPU6000_BUS_I2C_INTERNAL, MPU_DEVICE_TYPE_MPU6000, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO,  &MPU6000_I2C_interface, PX4_I2C_BUS_ONBOARD, false, NULL },
 #  endif
 #  if defined(PX4_I2C_BUS_EXPANSION)
-	{ MPU6000_BUS_I2C_EXTERNAL, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_I2C_interface, PX4_I2C_BUS_EXPANSION,  true, NULL },
+	{ MPU6000_BUS_I2C_EXTERNAL, MPU_DEVICE_TYPE_MPU6000, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_I2C_interface, PX4_I2C_BUS_EXPANSION,  true, NULL },
 #  endif
 #endif
 #ifdef PX4_SPIDEV_MPU
-	{ MPU6000_BUS_SPI_INTERNAL1, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
+	{ MPU6000_BUS_SPI_INTERNAL1, MPU_DEVICE_TYPE_MPU6000, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
 #endif
 #if defined(PX4_SPI_BUS_EXT)
-	{ MPU6000_BUS_SPI_EXTERNAL1, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXT,  true, NULL },
+	{ MPU6000_BUS_SPI_EXTERNAL1, MPU_DEVICE_TYPE_MPU6000, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXT,  true, NULL },
 #endif
 #ifdef PX4_SPIDEV_ICM_20602
-	{ MPU6000_BUS_SPI_INTERNAL1, ICM20602_DEVICE_PATH_ACCEL, ICM20602_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
+	{ MPU6000_BUS_SPI_INTERNAL1, MPU_DEVICE_TYPE_ICM20602, ICM20602_DEVICE_PATH_ACCEL, ICM20602_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
+#endif
+#ifdef PX4_SPIDEV_ICM_20608
+	{ MPU6000_BUS_SPI_INTERNAL1, MPU_DEVICE_TYPE_ICM20608, ICM20608_DEVICE_PATH_ACCEL, ICM20608_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
 #endif
 #ifdef PX4_SPIDEV_ICM_20689
-	{ MPU6000_BUS_SPI_INTERNAL2, ICM20689_DEVICE_PATH_ACCEL, ICM20689_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
+	{ MPU6000_BUS_SPI_INTERNAL2, MPU_DEVICE_TYPE_ICM20689, ICM20689_DEVICE_PATH_ACCEL, ICM20689_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
 #endif
 #if defined(PX4_SPI_BUS_EXTERNAL)
-	{ MPU6000_BUS_SPI_EXTERNAL1, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXTERNAL, true,  NULL },
-	{ MPU6000_BUS_SPI_EXTERNAL2, MPU_DEVICE_PATH_ACCEL_EXT1, MPU_DEVICE_PATH_GYRO_EXT1, &MPU6000_SPI_interface, PX4_SPI_BUS_EXTERNAL, true,  NULL },
+	{ MPU6000_BUS_SPI_EXTERNAL1, MPU_DEVICE_TYPE_MPU6000, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXTERNAL, true,  NULL },
+	{ MPU6000_BUS_SPI_EXTERNAL2, MPU_DEVICE_TYPE_MPU6000, MPU_DEVICE_PATH_ACCEL_EXT1, MPU_DEVICE_PATH_GYRO_EXT1, &MPU6000_SPI_interface, PX4_SPI_BUS_EXTERNAL, true,  NULL },
 #endif
 };
 
@@ -2406,6 +2387,11 @@ start(enum MPU6000_BUS busid, enum Rotation rotation, int range, int device_type
 		}
 
 		if (busid != MPU6000_BUS_ALL && bus_options[i].busid != busid) {
+			// not the one that is asked for
+			continue;
+		}
+
+		if (bus_options[i].device_type != device_type) {
 			// not the one that is asked for
 			continue;
 		}

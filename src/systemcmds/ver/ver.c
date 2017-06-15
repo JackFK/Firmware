@@ -57,6 +57,20 @@ static const char sz_ver_gcc_str[] 	= "gcc";
 static const char sz_ver_all_str[] 	= "all";
 static const char mcu_ver_str[]		= "mcu";
 static const char mcu_uid_str[]         = "uid";
+static const char mfg_uid_str[]         = "mfguid";
+
+#if defined(PX4_CPU_UUID_WORD32_FORMAT)
+#  define CPU_UUID_FORMAT PX4_CPU_UUID_WORD32_FORMAT
+#else
+/* This is the legacy format that did not print leading zeros*/
+#  define CPU_UUID_FORMAT "%X"
+#endif
+
+#if defined(PX4_CPU_UUID_WORD32_SEPARATOR)
+#  define CPU_UUID_SEPARATOR PX4_CPU_UUID_WORD32_SEPARATOR
+#else
+#  define CPU_UUID_SEPARATOR ":"
+#endif
 
 static void usage(const char *reason)
 {
@@ -64,7 +78,7 @@ static void usage(const char *reason)
 		printf("%s\n", reason);
 	}
 
-	printf("usage: ver {hw|hwcmp|git|bdate|gcc|all|mcu|uid|uri}\n\n");
+	printf("usage: ver {hw|hwcmp|git|bdate|gcc|all|mcu|mfguid|uid|uri}\n\n");
 }
 
 __EXPORT int ver_main(int argc, char *argv[]);
@@ -114,10 +128,10 @@ int ver_main(int argc, char *argv[])
 				unsigned type = (fwver >> (8 * 0)) & 0xFF;
 
 				if (type == 255) {
-					printf("FW version: Release %u.%u.%u (%u)\n", major, minor, patch, fwver);
+					printf("FW version: Release %x.%x.%x (%u)\n", major, minor, patch, fwver);
 
 				} else {
-					printf("FW version: %u.%u.%u %u (%u)\n", major, minor, patch, type, fwver);
+					printf("FW version: %x.%x.%x %x (%u)\n", major, minor, patch, type, fwver);
 				}
 
 
@@ -129,10 +143,10 @@ int ver_main(int argc, char *argv[])
 				printf("OS: %s\n", px4_os_name());
 
 				if (type == 255) {
-					printf("OS version: Release %u.%u.%u (%u)\n", major, minor, patch, fwver);
+					printf("OS version: Release %x.%x.%x (%u)\n", major, minor, patch, fwver);
 
 				} else {
-					printf("OS version: %u.%u.%u %u (%u)\n", major, minor, patch, type, fwver);
+					printf("OS version: %x.%x.%x %x (%u)\n", major, minor, patch, type, fwver);
 				}
 
 				const char *os_git_hash = px4_os_version_string();
@@ -162,6 +176,18 @@ int ver_main(int argc, char *argv[])
 				printf("Toolchain: %s, %s\n", px4_toolchain_name(), px4_toolchain_version());
 				ret = 0;
 
+			}
+
+			if (show_all || !strncmp(argv[1], mfg_uid_str, sizeof(mfg_uid_str))) {
+
+#if defined(BOARD_OVERRIDE_MFGUID)
+				char *mfguid_fmt_buffer = BOARD_OVERRIDE_MFGUID;
+#else
+				char mfguid_fmt_buffer[PX4_CPU_MFGUID_FORMAT_SIZE];
+				board_get_mfguid_formated(mfguid_fmt_buffer, sizeof(mfguid_fmt_buffer));
+#endif
+				printf("MFGUID: %s\n", mfguid_fmt_buffer);
+				ret = 0;
 			}
 
 			if (show_all || !strncmp(argv[1], mcu_ver_str, sizeof(mcu_ver_str))) {
@@ -194,13 +220,12 @@ int ver_main(int argc, char *argv[])
 #if defined(BOARD_OVERRIDE_UUID)
 				char *uid_fmt_buffer = BOARD_OVERRIDE_UUID;
 #else
-				char uid_fmt_buffer[PX4_CPU_UUID_WORD32_LEGACY_FORMAT_SIZE];
-				board_get_uuid_formated32(uid_fmt_buffer, sizeof(uid_fmt_buffer), "%X", ":", &px4_legacy_word32_order);
+				char uid_fmt_buffer[PX4_CPU_UUID_WORD32_FORMAT_SIZE];
+				board_get_uuid32_formated(uid_fmt_buffer, sizeof(uid_fmt_buffer), CPU_UUID_FORMAT, CPU_UUID_SEPARATOR);
 #endif
 				printf("UID: %s \n", uid_fmt_buffer);
 				ret = 0;
 			}
-
 
 			if (ret == 1) {
 				warn("unknown command.\n");

@@ -41,6 +41,7 @@
 #include <px4_config.h>
 #include <px4_defines.h>
 #include <drivers/drv_hrt.h>
+#include <float.h>
 
 #include "LandDetector.h"
 
@@ -59,6 +60,8 @@ LandDetector::LandDetector() :
 	_ground_contact_hysteresis(true),
 	_taskShouldExit(false),
 	_taskIsRunning(false),
+	_total_flight_time{0},
+	_takeoff_time{0},
 	_work{}
 {
 	// Use Trigger time when transitioning from in-air (false) to landed (true) / ground contact (true).
@@ -103,7 +106,8 @@ void LandDetector::_cycle()
 		_landDetected.freefall = false;
 		_landDetected.landed = false;
 		_landDetected.ground_contact = false;
-		_p_total_flight_time = param_find("LND_FLIGHT_TIME");
+		_p_total_flight_time_high = param_find("LND_FLIGHT_T_HI");
+		_p_total_flight_time_low = param_find("LND_FLIGHT_T_LO");
 
 		// Initialize uORB topics.
 		_initialize_topics();
@@ -122,31 +126,39 @@ void LandDetector::_cycle()
 
 	_update_state();
 
+	float alt_max_prev = _altitude_max;
+	_altitude_max = _get_max_altitude();
+
 	bool freefallDetected = (_state == LandDetectionState::FREEFALL);
 	bool landDetected = (_state == LandDetectionState::LANDED);
 	bool ground_contactDetected = (_state == LandDetectionState::GROUND_CONTACT);
-
 
 	// Only publish very first time or when the result has changed.
 	if ((_landDetectedPub == nullptr) ||
 	    (_landDetected.freefall != freefallDetected) ||
 	    (_landDetected.landed != landDetected) ||
-	    (_landDetected.ground_contact != ground_contactDetected)) {
+	    (_landDetected.ground_contact != ground_contactDetected) ||
+	    (fabsf(_landDetected.alt_max - alt_max_prev) > FLT_EPSILON)) {
+
+		if (!landDetected && _landDetected.landed) {
+			// We did take off
+			_takeoff_time = now;
+
+		} else if (_takeoff_time != 0 && landDetected && !_landDetected.landed) {
+			// We landed
+			_total_flight_time += now - _takeoff_time;
+			_takeoff_time = 0;
+			int32_t flight_time = (_total_flight_time >> 32) & 0xffffffff;
+			param_set_no_notification(_p_total_flight_time_high, &flight_time);
+			flight_time = _total_flight_time & 0xffffffff;
+			param_set_no_notification(_p_total_flight_time_low, &flight_time);
+		}
 
 		_landDetected.timestamp = hrt_absolute_time();
 		_landDetected.freefall = (_state == LandDetectionState::FREEFALL);
 		_landDetected.landed = (_state == LandDetectionState::LANDED);
 		_landDetected.ground_contact = (_state == LandDetectionState::GROUND_CONTACT);
-
-		// We did take off
-		if (landDetected && !_landDetected.landed) {
-			_takeoff_time = now;
-
-		} else if (_takeoff_time != 0 && !landDetected && _landDetected.landed) {
-			_total_flight_time += now - _takeoff_time;
-			_takeoff_time = 0;
-			param_set(_p_total_flight_time, &_total_flight_time);
-		}
+		_landDetected.alt_max = _altitude_max;
 
 		int instance;
 		orb_publish_auto(ORB_ID(vehicle_land_detected), &_landDetectedPub, &_landDetected,
@@ -163,7 +175,6 @@ void LandDetector::_cycle()
 		_taskIsRunning = false;
 	}
 }
-
 void LandDetector::_check_params(const bool force)
 {
 	bool updated;
@@ -177,21 +188,21 @@ void LandDetector::_check_params(const bool force)
 
 	if (updated || force) {
 		_update_params();
-		param_get(_p_total_flight_time, &_total_flight_time);
+		int32_t flight_time;
+		param_get(_p_total_flight_time_high, &flight_time);
+		_total_flight_time = ((uint64_t)flight_time) << 32;
+		param_get(_p_total_flight_time_low, &flight_time);
+		_total_flight_time |= flight_time;
 	}
 }
 
 void LandDetector::_update_state()
 {
-	/* ground contact and landed can be true simultaneously but only one state can be true at a particular time
+	/* when we are landed we also have ground contact for sure but only one output state can be true at a particular time
 	 * with higher priority for landed */
-	bool freefall = _get_freefall_state();
-	bool landed = _get_landed_state();
-	bool groundContact = (landed || _get_ground_contact_state());
-
-	_freefall_hysteresis.set_state_and_update(freefall);
-	_landed_hysteresis.set_state_and_update(landed);
-	_ground_contact_hysteresis.set_state_and_update(groundContact);
+	_freefall_hysteresis.set_state_and_update(_get_freefall_state());
+	_landed_hysteresis.set_state_and_update(_get_landed_state());
+	_ground_contact_hysteresis.set_state_and_update(_landed_hysteresis.get_state() || _get_ground_contact_state());
 
 	if (_freefall_hysteresis.get_state()) {
 		_state = LandDetectionState::FREEFALL;

@@ -53,45 +53,35 @@
  * If rotation matrix setpoint is invalid it will be generated from Euler angles for compatibility with old position controllers.
  */
 
+#include <conversion/rotation.h>
+#include <drivers/drv_hrt.h>
+#include <lib/geo/geo.h>
+#include <lib/mathlib/mathlib.h>
+#include <lib/tailsitter_recovery/tailsitter_recovery.h>
 #include <px4_config.h>
 #include <px4_defines.h>
-#include <px4_tasks.h>
 #include <px4_posix.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <math.h>
-#include <poll.h>
-#include <drivers/drv_hrt.h>
-#include <arch/board/board.h>
-#include <uORB/uORB.h>
-#include <uORB/topics/vehicle_attitude_setpoint.h>
-#include <uORB/topics/manual_control_setpoint.h>
-#include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/vehicle_rates_setpoint.h>
-#include <uORB/topics/fw_virtual_rates_setpoint.h>
-#include <uORB/topics/mc_virtual_rates_setpoint.h>
-#include <uORB/topics/control_state.h>
-#include <uORB/topics/vehicle_control_mode.h>
-#include <uORB/topics/vehicle_status.h>
-#include <uORB/topics/actuator_armed.h>
-#include <uORB/topics/parameter_update.h>
-#include <uORB/topics/multirotor_motor_limits.h>
-#include <uORB/topics/mc_att_ctrl_status.h>
-#include <uORB/topics/battery_status.h>
-#include <uORB/topics/sensor_gyro.h>
-#include <uORB/topics/sensor_correction.h>
-#include <systemlib/param/param.h>
+#include <px4_tasks.h>
+#include <systemlib/circuit_breaker.h>
 #include <systemlib/err.h>
+#include <systemlib/param/param.h>
 #include <systemlib/perf_counter.h>
 #include <systemlib/systemlib.h>
-#include <systemlib/circuit_breaker.h>
-#include <lib/mathlib/mathlib.h>
-#include <lib/geo/geo.h>
-#include <lib/tailsitter_recovery/tailsitter_recovery.h>
-#include <conversion/rotation.h>
+#include <uORB/topics/actuator_armed.h>
+#include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/battery_status.h>
+#include <uORB/topics/control_state.h>
+#include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/mc_att_ctrl_status.h>
+#include <uORB/topics/multirotor_motor_limits.h>
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/sensor_correction.h>
+#include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/vehicle_control_mode.h>
+#include <uORB/topics/vehicle_rates_setpoint.h>
+#include <uORB/topics/vehicle_status.h>
+#include <uORB/uORB.h>
 
 /**
  * Multicopter attitude control app start / stop handling function
@@ -412,8 +402,8 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_v_rates_sp_pub(nullptr),
 	_actuators_0_pub(nullptr),
 	_controller_status_pub(nullptr),
-	_rates_sp_id(0),
-	_actuators_id(0),
+	_rates_sp_id(nullptr),
+	_actuators_id(nullptr),
 
 	_actuators_0_circuit_breaker_enabled(false),
 
@@ -536,14 +526,13 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 		_ts_opt_recovery = new TailsitterRecovery();
 	}
 
-	/* initialize _corrections to identity as we might not immediately get a topic update */
+	/* initialize thermal corrections as we might not immediately get a topic update (only non-zero values) */
 	for (unsigned i = 0; i < 3; i++) {
-		_sensor_correction.gyro_scale[i] = 1.0f;
-		_sensor_correction.accel_scale[i] = 1.0f;
+		// used scale factors to unity
+		_sensor_correction.gyro_scale_0[i] = 1.0f;
+		_sensor_correction.gyro_scale_1[i] = 1.0f;
+		_sensor_correction.gyro_scale_2[i] = 1.0f;
 	}
-
-	_sensor_correction.baro_scale = 1.0f;
-
 
 }
 
@@ -836,7 +825,7 @@ MulticopterAttitudeControl::sensor_correction_poll()
 	}
 
 	/* update the latest gyro selection */
-	if (_sensor_correction.selected_gyro_instance < sizeof(_sensor_gyro_sub) / sizeof(_sensor_gyro_sub[0])) {
+	if (_sensor_correction.selected_gyro_instance < _gyro_count) {
 		_selected_gyro = _sensor_correction.selected_gyro_instance;
 	}
 }
@@ -994,9 +983,28 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 	_board_rotation = board_rotation_offset * _board_rotation;
 
 	// get the raw gyro data and correct for thermal errors
-	math::Vector<3> rates(_sensor_gyro.x * _sensor_correction.gyro_scale[0] + _sensor_correction.gyro_offset[0],
-			      _sensor_gyro.y * _sensor_correction.gyro_scale[1] + _sensor_correction.gyro_offset[1],
-			      _sensor_gyro.z * _sensor_correction.gyro_scale[2] + _sensor_correction.gyro_offset[2]);
+	math::Vector<3> rates;
+
+	if (_selected_gyro == 0) {
+		rates(0) = (_sensor_gyro.x - _sensor_correction.gyro_offset_0[0]) * _sensor_correction.gyro_scale_0[0];
+		rates(1) = (_sensor_gyro.y - _sensor_correction.gyro_offset_0[1]) * _sensor_correction.gyro_scale_0[1];
+		rates(2) = (_sensor_gyro.z - _sensor_correction.gyro_offset_0[2]) * _sensor_correction.gyro_scale_0[2];
+
+	} else if (_selected_gyro == 1) {
+		rates(0) = (_sensor_gyro.x - _sensor_correction.gyro_offset_1[0]) * _sensor_correction.gyro_scale_1[0];
+		rates(1) = (_sensor_gyro.y - _sensor_correction.gyro_offset_1[1]) * _sensor_correction.gyro_scale_1[1];
+		rates(2) = (_sensor_gyro.z - _sensor_correction.gyro_offset_1[2]) * _sensor_correction.gyro_scale_1[2];
+
+	} else if (_selected_gyro == 2) {
+		rates(0) = (_sensor_gyro.x - _sensor_correction.gyro_offset_2[0]) * _sensor_correction.gyro_scale_2[0];
+		rates(1) = (_sensor_gyro.y - _sensor_correction.gyro_offset_2[1]) * _sensor_correction.gyro_scale_2[1];
+		rates(2) = (_sensor_gyro.z - _sensor_correction.gyro_offset_2[2]) * _sensor_correction.gyro_scale_2[2];
+
+	} else {
+		rates(0) = _sensor_gyro.x;
+		rates(1) = _sensor_gyro.y;
+		rates(2) = _sensor_gyro.z;
+	}
 
 	// rotate corrected measurements from sensor to body frame
 	rates = _board_rotation * rates;
@@ -1091,6 +1099,10 @@ MulticopterAttitudeControl::task_main()
 
 	_gyro_count = math::min(orb_group_count(ORB_ID(sensor_gyro)), MAX_GYRO_COUNT);
 
+	if (_gyro_count == 0) {
+		_gyro_count = 1;
+	}
+
 	for (unsigned s = 0; s < _gyro_count; s++) {
 		_sensor_gyro_sub[s] = orb_subscribe_multi(ORB_ID(sensor_gyro), s);
 	}
@@ -1102,10 +1114,11 @@ MulticopterAttitudeControl::task_main()
 
 	/* wakeup source: gyro data from sensor selected by the sensor app */
 	px4_pollfd_struct_t poll_fds = {};
-	poll_fds.fd = _sensor_gyro_sub[_selected_gyro];
 	poll_fds.events = POLLIN;
 
 	while (!_task_should_exit) {
+
+		poll_fds.fd = _sensor_gyro_sub[_selected_gyro];
 
 		/* wait for up to 100ms for data */
 		int pret = px4_poll(&poll_fds, 1, 100);
@@ -1339,7 +1352,6 @@ MulticopterAttitudeControl::task_main()
 	}
 
 	_control_task = -1;
-	return;
 }
 
 int

@@ -328,7 +328,9 @@ MPU9250::init()
 #endif
 
 	/* do CDev init for the mag device node, keep it optional */
-	ret = _mag->init();
+	if (_whoami == MPU_WHOAMI_9250) {
+		ret = _mag->init();
+	}
 
 	/* if probe/setup failed, bail now */
 	if (ret != OK) {
@@ -369,6 +371,12 @@ out:
 
 int MPU9250::reset()
 {
+	irqstate_t state;
+
+	// Hold off sampling for 60 ms
+	state = px4_enter_critical_section();
+	_reset_wait = hrt_absolute_time() + 60000;
+
 	write_reg(MPUREG_PWR_MGMT_1, BIT_H_RESET);
 	up_udelay(10000);
 
@@ -377,6 +385,14 @@ int MPU9250::reset()
 
 	write_checked_reg(MPUREG_PWR_MGMT_2, 0);
 	up_udelay(1000);
+
+	px4_leave_critical_section(state);
+
+	// Hold off sampling for 30 ms
+
+	state = px4_enter_critical_section();
+	_reset_wait = hrt_absolute_time() + 30000;
+	px4_leave_critical_section(state);
 
 	// SAMPLE RATE
 	_set_sample_rate(_sample_rate);
@@ -450,6 +466,7 @@ MPU9250::probe()
 	// verify product revision
 	switch (_whoami) {
 	case MPU_WHOAMI_9250:
+	case MPU_WHOAMI_6500:
 		memset(_checked_values, 0, sizeof(_checked_values));
 		memset(_checked_bad, 0, sizeof(_checked_bad));
 		_checked_values[0] = _whoami;
@@ -592,31 +609,6 @@ MPU9250::accel_self_test()
 		return 1;
 	}
 
-	/* inspect accel offsets */
-	if (fabsf(_accel_scale.x_offset) < 0.000001f) {
-		return 2;
-	}
-
-	if (fabsf(_accel_scale.x_scale - 1.0f) > 0.4f || fabsf(_accel_scale.x_scale - 1.0f) < 0.000001f) {
-		return 3;
-	}
-
-	if (fabsf(_accel_scale.y_offset) < 0.000001f) {
-		return 4;
-	}
-
-	if (fabsf(_accel_scale.y_scale - 1.0f) > 0.4f || fabsf(_accel_scale.y_scale - 1.0f) < 0.000001f) {
-		return 5;
-	}
-
-	if (fabsf(_accel_scale.z_offset) < 0.000001f) {
-		return 6;
-	}
-
-	if (fabsf(_accel_scale.z_scale - 1.0f) > 0.4f || fabsf(_accel_scale.z_scale - 1.0f) < 0.000001f) {
-		return 7;
-	}
-
 	return 0;
 }
 
@@ -663,14 +655,6 @@ MPU9250::gyro_self_test()
 	}
 
 	if (fabsf(_gyro_scale.z_scale - 1.0f) > max_scale) {
-		return 1;
-	}
-
-	/* check if all scales are zero */
-	if ((fabsf(_gyro_scale.x_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.y_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.z_offset) < 0.000001f)) {
-		/* if all are zero, this device is not calibrated */
 		return 1;
 	}
 

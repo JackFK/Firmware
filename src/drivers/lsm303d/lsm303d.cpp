@@ -197,7 +197,7 @@
 #define INT_SRC_M               0x13
 
 /* default values for this device */
-#define LSM303D_ACCEL_DEFAULT_RANGE_G			8
+#define LSM303D_ACCEL_DEFAULT_RANGE_G			16
 #define LSM303D_ACCEL_DEFAULT_RATE			800
 #define LSM303D_ACCEL_DEFAULT_ONCHIP_FILTER_FREQ	50
 #define LSM303D_ACCEL_DEFAULT_DRIVER_FILTER_FREQ	30
@@ -1124,31 +1124,6 @@ int
 LSM303D::accel_self_test()
 {
 	if (_accel_read == 0) {
-		return 1;
-	}
-
-	/* inspect accel offsets */
-	if (fabsf(_accel_scale.x_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.x_scale - 1.0f) > 0.4f || fabsf(_accel_scale.x_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.y_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.y_scale - 1.0f) > 0.4f || fabsf(_accel_scale.y_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.z_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.z_scale - 1.0f) > 0.4f || fabsf(_accel_scale.z_scale - 1.0f) < 0.000001f) {
 		return 1;
 	}
 

@@ -173,7 +173,7 @@ public:
 		     int instance = 0,
 		     List<SubscriptionNode *> *list = nullptr);
 
-	Subscription(const Subscription &);
+	Subscription(const Subscription & /*other*/);
 
 	/**
 	 * Deconstructor
@@ -193,7 +193,7 @@ public:
 	/*
 	 * This function gets the T struct data
 	 * */
-	const T &get();
+	const T &get() const { return _data; }
 private:
 	T _data;
 };

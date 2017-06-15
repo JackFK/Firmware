@@ -110,7 +110,7 @@ protected:
 /// @brief To assert specifically to true.
 #define ut_assert_true(test)						\
 	do {									\
-		if (test != true) {							\
+		if ((test) != true) {							\
 			_print_assert("result not true", #test, __FILE__, __LINE__);	\
 			return false;						\
 		} else {							\
@@ -121,7 +121,7 @@ protected:
 /// @brief To assert specifically to true.
 #define ut_assert_false(test)						\
 	do {									\
-		if (test != false) {							\
+		if ((test) != false) {							\
 			_print_assert("result not false", #test, __FILE__, __LINE__);	\
 			return false;						\
 		} else {							\
@@ -147,7 +147,7 @@ protected:
 /// since it will give you better error reporting of the actual values being compared.
 #define ut_compare_float(message, v1, v2, precision)						\
 	do {											\
-		int _p = pow(10, precision);							\
+		int _p = pow(10.0f, precision);							\
 		int _v1 = (int)(v1 * _p + 0.5f);						\
 		int _v2 = (int)(v2 * _p + 0.5f);						\
 		if (_v1 != _v2) {								\

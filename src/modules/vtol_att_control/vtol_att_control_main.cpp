@@ -132,6 +132,8 @@ VtolAttitudeControl::VtolAttitudeControl() :
 	_params_handles.vtol_type = param_find("VT_TYPE");
 	_params_handles.elevons_mc_lock = param_find("VT_ELEV_MC_LOCK");
 	_params_handles.fw_min_alt = param_find("VT_FW_MIN_ALT");
+	_params_handles.fw_qc_max_pitch = param_find("VT_FW_QC_P");
+	_params_handles.fw_qc_max_roll = param_find("VT_FW_QC_R");
 	_params_handles.front_trans_time_openloop = param_find("VT_F_TR_OL_TM");
 	_params_handles.front_trans_time_min = param_find("VT_TRANS_MIN_TM");
 
@@ -562,6 +564,14 @@ VtolAttitudeControl::parameters_update()
 	param_get(_params_handles.fw_min_alt, &v);
 	_params.fw_min_alt = v;
 
+	/* maximum pitch angle (QuadChute) */
+	param_get(_params_handles.fw_qc_max_pitch, &l);
+	_params.fw_qc_max_pitch = l;
+
+	/* maximum roll angle (QuadChute) */
+	param_get(_params_handles.fw_qc_max_roll, &l);
+	_params.fw_qc_max_roll = l;
+
 	param_get(_params_handles.front_trans_time_openloop, &_params.front_trans_time_openloop);
 
 	param_get(_params_handles.front_trans_time_min, &_params.front_trans_time_min);
@@ -652,7 +662,7 @@ void VtolAttitudeControl::task_main()
 	parameters_update();  // initialize parameter cache
 
 	/* update vtol vehicle status*/
-	_vtol_vehicle_status.fw_permanent_stab = _params.vtol_fw_permanent_stab == 1 ? true : false;
+	_vtol_vehicle_status.fw_permanent_stab = (_params.vtol_fw_permanent_stab == 1);
 
 	// make sure we start with idle in mc mode
 	_vtol_type->set_idle_mc();
@@ -704,7 +714,7 @@ void VtolAttitudeControl::task_main()
 			parameters_update();
 		}
 
-		_vtol_vehicle_status.fw_permanent_stab = _params.vtol_fw_permanent_stab == 1 ? true : false;
+		_vtol_vehicle_status.fw_permanent_stab = (_params.vtol_fw_permanent_stab == 1);
 
 		mc_virtual_att_sp_poll();
 		fw_virtual_att_sp_poll();
@@ -836,7 +846,6 @@ void VtolAttitudeControl::task_main()
 
 	warnx("exit");
 	_control_task = -1;
-	return;
 }
 
 int

@@ -49,10 +49,10 @@
 //#define MAVLINK_FTP_DEBUG
 
 MavlinkFTP::MavlinkFTP(Mavlink *mavlink) :
-	MavlinkStream(mavlink),
 	_session_info{},
 	_utRcvMsgFunc{},
-	_worker_data{}
+	_worker_data{},
+	_mavlink(mavlink)
 {
 	// initialize session
 	_session_info.fd = -1;
@@ -63,20 +63,8 @@ MavlinkFTP::~MavlinkFTP()
 
 }
 
-const char *
-MavlinkFTP::get_name(void) const
-{
-	return "MAVLINK_FTP";
-}
-
-uint16_t
-MavlinkFTP::get_id(void)
-{
-	return MAVLINK_MSG_ID_FILE_TRANSFER_PROTOCOL;
-}
-
 unsigned
-MavlinkFTP::get_size(void)
+MavlinkFTP::get_size()
 {
 	if (_session_info.stream_download) {
 		return MAVLINK_MSG_ID_FILE_TRANSFER_PROTOCOL_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
@@ -84,12 +72,6 @@ MavlinkFTP::get_size(void)
 	} else {
 		return 0;
 	}
-}
-
-MavlinkStream *
-MavlinkFTP::new_instance(Mavlink *mavlink)
-{
-	return new MavlinkFTP(mavlink);
 }
 
 #ifdef MAVLINK_FTP_UNIT_TEST
@@ -102,7 +84,7 @@ MavlinkFTP::set_unittest_worker(ReceiveMessageFunc_t rcvMsgFunc, void *worker_da
 #endif
 
 uint8_t
-MavlinkFTP::_getServerSystemId(void)
+MavlinkFTP::_getServerSystemId()
 {
 #ifdef MAVLINK_FTP_UNIT_TEST
 	// We use fake ids when unit testing
@@ -114,7 +96,7 @@ MavlinkFTP::_getServerSystemId(void)
 }
 
 uint8_t
-MavlinkFTP::_getServerComponentId(void)
+MavlinkFTP::_getServerComponentId()
 {
 #ifdef MAVLINK_FTP_UNIT_TEST
 	// We use fake ids when unit testing
@@ -126,7 +108,7 @@ MavlinkFTP::_getServerComponentId(void)
 }
 
 uint8_t
-MavlinkFTP::_getServerChannel(void)
+MavlinkFTP::_getServerChannel()
 {
 #ifdef MAVLINK_FTP_UNIT_TEST
 	// We use fake ids when unit testing

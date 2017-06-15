@@ -148,7 +148,6 @@ private:
 	GYROSIM_gyro		*_gyro;
 	uint8_t			_product;	/** product code */
 
-	WorkHandle		_call;
 	unsigned		_call_interval;
 
 	ringbuffer::RingBuffer	*_accel_reports;
@@ -312,7 +311,6 @@ GYROSIM::GYROSIM(const char *path_accel, const char *path_gyro, enum Rotation ro
 	VirtDevObj("GYROSIM", path_accel, ACCEL_BASE_DEVICE_PATH, 1e6 / 400),
 	_gyro(new GYROSIM_gyro(this, path_gyro)),
 	_product(GYROSIMES_REV_C4),
-	_call{},
 	_accel_reports(nullptr),
 	_accel_scale{},
 	_accel_range_scale(0.0f),
@@ -618,31 +616,6 @@ GYROSIM::accel_self_test()
 		return 1;
 	}
 
-	/* inspect accel offsets */
-	if (fabsf(_accel_scale.x_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.x_scale - 1.0f) > 0.4f || fabsf(_accel_scale.x_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.y_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.y_scale - 1.0f) > 0.4f || fabsf(_accel_scale.y_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.z_offset) < 0.000001f) {
-		return 1;
-	}
-
-	if (fabsf(_accel_scale.z_scale - 1.0f) > 0.4f || fabsf(_accel_scale.z_scale - 1.0f) < 0.000001f) {
-		return 1;
-	}
-
 	return 0;
 }
 
@@ -691,14 +664,6 @@ GYROSIM::gyro_self_test()
 	}
 
 	if (fabsf(_gyro_scale.z_scale - 1.0f) > max_scale) {
-		return 1;
-	}
-
-	/* check if all scales are zero */
-	if ((fabsf(_gyro_scale.x_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.y_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.z_offset) < 0.000001f)) {
-		/* if all are zero, this device is not calibrated */
 		return 1;
 	}
 
@@ -1256,7 +1221,7 @@ namespace gyrosim
 
 GYROSIM	*g_dev_sim; // on simulated bus
 
-int	start(enum Rotation);
+int	start(enum Rotation /*rotation*/);
 int	stop();
 int	test();
 int	reset();

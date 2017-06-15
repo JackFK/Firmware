@@ -54,7 +54,7 @@ int TemperatureCompensation::initialize_parameter_handles(ParameterHandles &para
 	/* rate gyro calibration parameters */
 	parameter_handles.gyro_tc_enable = param_find("TC_G_ENABLE");
 
-	for (unsigned j = 0; j < SENSOR_COUNT_MAX; j++) {
+	for (unsigned j = 0; j < GYRO_COUNT_MAX; j++) {
 		sprintf(nbuf, "TC_G%d_ID", j);
 		parameter_handles.gyro_cal_handles[j].ID = param_find(nbuf);
 
@@ -82,7 +82,7 @@ int TemperatureCompensation::initialize_parameter_handles(ParameterHandles &para
 	/* accelerometer calibration parameters */
 	parameter_handles.accel_tc_enable = param_find("TC_A_ENABLE");
 
-	for (unsigned j = 0; j < SENSOR_COUNT_MAX; j++) {
+	for (unsigned j = 0; j < ACCEL_COUNT_MAX; j++) {
 		sprintf(nbuf, "TC_A%d_ID", j);
 		parameter_handles.accel_cal_handles[j].ID = param_find(nbuf);
 
@@ -110,7 +110,7 @@ int TemperatureCompensation::initialize_parameter_handles(ParameterHandles &para
 	/* barometer calibration parameters */
 	parameter_handles.baro_tc_enable = param_find("TC_B_ENABLE");
 
-	for (unsigned j = 0; j < SENSOR_COUNT_MAX; j++) {
+	for (unsigned j = 0; j < BARO_COUNT_MAX; j++) {
 		sprintf(nbuf, "TC_B%d_ID", j);
 		parameter_handles.baro_cal_handles[j].ID = param_find(nbuf);
 		sprintf(nbuf, "TC_B%d_X5", j);
@@ -152,11 +152,11 @@ int TemperatureCompensation::parameters_update()
 	/* rate gyro calibration parameters */
 	param_get(parameter_handles.gyro_tc_enable, &(_parameters.gyro_tc_enable));
 
-	for (unsigned j = 0; j < SENSOR_COUNT_MAX; j++) {
+	for (unsigned j = 0; j < GYRO_COUNT_MAX; j++) {
 		if (param_get(parameter_handles.gyro_cal_handles[j].ID, &(_parameters.gyro_cal_data[j].ID)) == PX4_OK) {
 			param_get(parameter_handles.gyro_cal_handles[j].ref_temp, &(_parameters.gyro_cal_data[j].ref_temp));
 			param_get(parameter_handles.gyro_cal_handles[j].min_temp, &(_parameters.gyro_cal_data[j].min_temp));
-			param_get(parameter_handles.gyro_cal_handles[j].min_temp, &(_parameters.gyro_cal_data[j].min_temp));
+			param_get(parameter_handles.gyro_cal_handles[j].max_temp, &(_parameters.gyro_cal_data[j].max_temp));
 
 			for (unsigned int i = 0; i < 3; i++) {
 				param_get(parameter_handles.gyro_cal_handles[j].x3[i], &(_parameters.gyro_cal_data[j].x3[i]));
@@ -183,11 +183,11 @@ int TemperatureCompensation::parameters_update()
 	/* accelerometer calibration parameters */
 	param_get(parameter_handles.accel_tc_enable, &(_parameters.accel_tc_enable));
 
-	for (unsigned j = 0; j < SENSOR_COUNT_MAX; j++) {
+	for (unsigned j = 0; j < ACCEL_COUNT_MAX; j++) {
 		if (param_get(parameter_handles.accel_cal_handles[j].ID, &(_parameters.accel_cal_data[j].ID)) == PX4_OK) {
 			param_get(parameter_handles.accel_cal_handles[j].ref_temp, &(_parameters.accel_cal_data[j].ref_temp));
 			param_get(parameter_handles.accel_cal_handles[j].min_temp, &(_parameters.accel_cal_data[j].min_temp));
-			param_get(parameter_handles.accel_cal_handles[j].min_temp, &(_parameters.accel_cal_data[j].min_temp));
+			param_get(parameter_handles.accel_cal_handles[j].max_temp, &(_parameters.accel_cal_data[j].max_temp));
 
 			for (unsigned int i = 0; i < 3; i++) {
 				param_get(parameter_handles.accel_cal_handles[j].x3[i], &(_parameters.accel_cal_data[j].x3[i]));
@@ -214,11 +214,11 @@ int TemperatureCompensation::parameters_update()
 	/* barometer calibration parameters */
 	param_get(parameter_handles.baro_tc_enable, &(_parameters.baro_tc_enable));
 
-	for (unsigned j = 0; j < SENSOR_COUNT_MAX; j++) {
+	for (unsigned j = 0; j < BARO_COUNT_MAX; j++) {
 		if (param_get(parameter_handles.baro_cal_handles[j].ID, &(_parameters.baro_cal_data[j].ID)) == PX4_OK) {
 			param_get(parameter_handles.baro_cal_handles[j].ref_temp, &(_parameters.baro_cal_data[j].ref_temp));
 			param_get(parameter_handles.baro_cal_handles[j].min_temp, &(_parameters.baro_cal_data[j].min_temp));
-			param_get(parameter_handles.baro_cal_handles[j].min_temp, &(_parameters.baro_cal_data[j].min_temp));
+			param_get(parameter_handles.baro_cal_handles[j].max_temp, &(_parameters.baro_cal_data[j].max_temp));
 			param_get(parameter_handles.baro_cal_handles[j].x5, &(_parameters.baro_cal_data[j].x5));
 			param_get(parameter_handles.baro_cal_handles[j].x4, &(_parameters.baro_cal_data[j].x4));
 			param_get(parameter_handles.baro_cal_handles[j].x3, &(_parameters.baro_cal_data[j].x3));
@@ -238,6 +238,13 @@ int TemperatureCompensation::parameters_update()
 			ret = PX4_ERROR;
 		}
 	}
+
+	/* the offsets & scales might have changed, so make sure to report that change later when applying the
+	 * next corrections
+	 */
+	_gyro_data.reset_temperature();
+	_accel_data.reset_temperature();
+	_baro_data.reset_temperature();
 
 	return ret;
 }
@@ -263,21 +270,22 @@ bool TemperatureCompensation::calc_thermal_offsets_1D(SensorCalData1D &coef, flo
 	}
 
 	// calulate the offset
-	offset = coef.x0 + coef.x1 * delta_temp;
-	delta_temp *= delta_temp;
-	offset += coef.x2 * delta_temp;
-	delta_temp *= delta_temp;
-	offset += coef.x3 * delta_temp;
-	delta_temp *= delta_temp;
-	offset += coef.x4 * delta_temp;
-	delta_temp *= delta_temp;
-	offset += coef.x5 * delta_temp;
+	float temp_var = delta_temp;
+	offset = coef.x0 + coef.x1 * temp_var;
+	temp_var *= delta_temp;
+	offset += coef.x2 * temp_var;
+	temp_var *= delta_temp;
+	offset += coef.x3 * temp_var;
+	temp_var *= delta_temp;
+	offset += coef.x4 * temp_var;
+	temp_var *= delta_temp;
+	offset += coef.x5 * temp_var;
 
 	return ret;
 
 }
 
-bool TemperatureCompensation::calc_thermal_offsets_3D(SensorCalData3D &coef, float measured_temp, float offset[])
+bool TemperatureCompensation::calc_thermal_offsets_3D(const SensorCalData3D &coef, float measured_temp, float offset[])
 {
 	bool ret = true;
 
@@ -285,19 +293,17 @@ bool TemperatureCompensation::calc_thermal_offsets_3D(SensorCalData3D &coef, flo
 	float delta_temp;
 
 	if (measured_temp > coef.max_temp) {
-		delta_temp = coef.max_temp;
+		delta_temp = coef.max_temp - coef.ref_temp;
 		ret = false;
 
 	} else if (measured_temp < coef.min_temp) {
-		delta_temp = coef.min_temp;
+		delta_temp = coef.min_temp - coef.ref_temp;
 		ret = false;
 
 	} else {
-		delta_temp = measured_temp;
+		delta_temp = measured_temp - coef.ref_temp;
 
 	}
-
-	delta_temp -= coef.ref_temp;
 
 	// calulate the offsets
 	float delta_temp_2 = delta_temp * delta_temp;
@@ -317,7 +323,7 @@ int TemperatureCompensation::set_sensor_id_gyro(uint32_t device_id, int topic_in
 		return 0;
 	}
 
-	return set_sensor_id(device_id, topic_instance, _gyro_data, _parameters.gyro_cal_data);
+	return set_sensor_id(device_id, topic_instance, _gyro_data, _parameters.gyro_cal_data, GYRO_COUNT_MAX);
 }
 
 int TemperatureCompensation::set_sensor_id_accel(uint32_t device_id, int topic_instance)
@@ -326,7 +332,7 @@ int TemperatureCompensation::set_sensor_id_accel(uint32_t device_id, int topic_i
 		return 0;
 	}
 
-	return set_sensor_id(device_id, topic_instance, _accel_data, _parameters.accel_cal_data);
+	return set_sensor_id(device_id, topic_instance, _accel_data, _parameters.accel_cal_data, ACCEL_COUNT_MAX);
 }
 
 int TemperatureCompensation::set_sensor_id_baro(uint32_t device_id, int topic_instance)
@@ -335,22 +341,21 @@ int TemperatureCompensation::set_sensor_id_baro(uint32_t device_id, int topic_in
 		return 0;
 	}
 
-	return set_sensor_id(device_id, topic_instance, _baro_data, _parameters.baro_cal_data);
+	return set_sensor_id(device_id, topic_instance, _baro_data, _parameters.baro_cal_data, BARO_COUNT_MAX);
 }
 
 template<typename T>
 int TemperatureCompensation::set_sensor_id(uint32_t device_id, int topic_instance, PerSensorData &sensor_data,
-		const T *sensor_cal_data)
+		const T *sensor_cal_data, uint8_t sensor_count_max)
 {
-	for (int i = 0; i < SENSOR_COUNT_MAX; ++i) {
+	for (int i = 0; i < sensor_count_max; ++i) {
 		if (device_id == sensor_cal_data[i].ID) {
 			sensor_data.device_mapping[topic_instance] = i;
-			return 0;
+			return i;
 		}
 	}
 
 	return -1;
-
 }
 
 int TemperatureCompensation::apply_corrections_gyro(int topic_instance, math::Vector<3> &sensor_data, float temperature,
@@ -371,13 +376,11 @@ int TemperatureCompensation::apply_corrections_gyro(int topic_instance, math::Ve
 	// get the sensor scale factors and correct the data
 	for (unsigned axis_index = 0; axis_index < 3; axis_index++) {
 		scales[axis_index] = _parameters.gyro_cal_data[mapping].scale[axis_index];
-		sensor_data(axis_index) = sensor_data(axis_index) * scales[axis_index] + offsets[axis_index];
+		sensor_data(axis_index) = (sensor_data(axis_index) - offsets[axis_index]) * scales[axis_index];
 	}
 
-	int8_t temperaturei = (int8_t)temperature;
-
-	if (temperaturei != _gyro_data.last_temperature[topic_instance]) {
-		_gyro_data.last_temperature[topic_instance] = temperaturei;
+	if (fabsf(temperature - _gyro_data.last_temperature[topic_instance]) > 1.0f) {
+		_gyro_data.last_temperature[topic_instance] = temperature;
 		return 2;
 	}
 
@@ -402,13 +405,11 @@ int TemperatureCompensation::apply_corrections_accel(int topic_instance, math::V
 	// get the sensor scale factors and correct the data
 	for (unsigned axis_index = 0; axis_index < 3; axis_index++) {
 		scales[axis_index] = _parameters.accel_cal_data[mapping].scale[axis_index];
-		sensor_data(axis_index) = sensor_data(axis_index) * scales[axis_index] + offsets[axis_index];
+		sensor_data(axis_index) = (sensor_data(axis_index) - offsets[axis_index]) * scales[axis_index];
 	}
 
-	int8_t temperaturei = (int8_t)temperature;
-
-	if (temperaturei != _accel_data.last_temperature[topic_instance]) {
-		_accel_data.last_temperature[topic_instance] = temperaturei;
+	if (fabsf(temperature - _accel_data.last_temperature[topic_instance]) > 1.0f) {
+		_accel_data.last_temperature[topic_instance] = temperature;
 		return 2;
 	}
 
@@ -432,12 +433,10 @@ int TemperatureCompensation::apply_corrections_baro(int topic_instance, float &s
 
 	// get the sensor scale factors and correct the data
 	*scales = _parameters.baro_cal_data[mapping].scale;
-	sensor_data = sensor_data * *scales + *offsets;
+	sensor_data = (sensor_data - *offsets) * *scales;
 
-	int8_t temperaturei = (int8_t)temperature;
-
-	if (temperaturei != _baro_data.last_temperature[topic_instance]) {
-		_baro_data.last_temperature[topic_instance] = temperaturei;
+	if (fabsf(temperature - _baro_data.last_temperature[topic_instance]) > 1.0f) {
+		_baro_data.last_temperature[topic_instance] = temperature;
 		return 2;
 	}
 
@@ -450,7 +449,7 @@ void TemperatureCompensation::print_status()
 	PX4_INFO(" gyro: enabled: %i", _parameters.gyro_tc_enable);
 
 	if (_parameters.gyro_tc_enable == 1) {
-		for (int i = 0; i < SENSOR_COUNT_MAX; ++i) {
+		for (int i = 0; i < GYRO_COUNT_MAX; ++i) {
 			uint8_t mapping = _gyro_data.device_mapping[i];
 
 			if (_gyro_data.device_mapping[i] != 255) {
@@ -462,7 +461,7 @@ void TemperatureCompensation::print_status()
 	PX4_INFO(" accel: enabled: %i", _parameters.accel_tc_enable);
 
 	if (_parameters.accel_tc_enable == 1) {
-		for (int i = 0; i < SENSOR_COUNT_MAX; ++i) {
+		for (int i = 0; i < ACCEL_COUNT_MAX; ++i) {
 			uint8_t mapping = _accel_data.device_mapping[i];
 
 			if (_accel_data.device_mapping[i] != 255) {
@@ -474,7 +473,7 @@ void TemperatureCompensation::print_status()
 	PX4_INFO(" baro: enabled: %i", _parameters.baro_tc_enable);
 
 	if (_parameters.baro_tc_enable == 1) {
-		for (int i = 0; i < SENSOR_COUNT_MAX; ++i) {
+		for (int i = 0; i < BARO_COUNT_MAX; ++i) {
 			uint8_t mapping = _baro_data.device_mapping[i];
 
 			if (_baro_data.device_mapping[i] != 255) {

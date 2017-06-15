@@ -28,6 +28,7 @@ set(config_module_list
 	# System commands
 	#
 	systemcmds/param
+	systemcmds/led_control
 	systemcmds/mixer
 	systemcmds/ver
 	systemcmds/esc_calib
@@ -46,10 +47,12 @@ set(config_module_list
 	#
 	# Vehicle Control
 	#
-	modules/mc_att_control
-	modules/mc_pos_control
 	modules/fw_att_control
 	modules/fw_pos_control_l1
+	modules/gnd_att_control
+	modules/gnd_pos_control
+	modules/mc_att_control
+	modules/mc_pos_control
 	modules/vtol_att_control
 
 	#
@@ -71,10 +74,12 @@ set(config_module_list
 	# PX4 drivers
 	#
 	drivers/gps
+	drivers/navio_adc
 	drivers/navio_sysfs_rc_in
 	drivers/navio_sysfs_pwm_out
-	drivers/navio_gpio
+	drivers/linux_gpio
 	drivers/navio_rgbled
+	drivers/pwm_out_sim
 
 	#
 	# Libraries
@@ -86,6 +91,7 @@ set(config_module_list
 	lib/ecl
 	lib/geo_lookup
 	lib/launchdetection
+	lib/led
 	lib/external_lgpl
 	lib/conversion
 	lib/terrain_estimation

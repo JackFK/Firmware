@@ -28,7 +28,7 @@ set(config_module_list
 	#drivers/mb12xx
 	#drivers/srf02
 	drivers/sf0x
-	#drivers/ll40ls
+	drivers/ll40ls
 	drivers/trone
 	drivers/gps
 	drivers/pwm_out_sim
@@ -39,12 +39,12 @@ set(config_module_list
 	drivers/airspeed
 	drivers/ets_airspeed
 	drivers/meas_airspeed
-	#drivers/frsky_telemetry
+	drivers/frsky_telemetry
 	modules/sensors
 	#drivers/mkblctrl
 	drivers/px4flow
 	#drivers/oreoled
-	#drivers/vmount
+	drivers/vmount
 	drivers/pwm_input
 	drivers/camera_trigger
 	drivers/bst
@@ -81,7 +81,7 @@ set(config_module_list
 	#drivers/test_ppm
 	#lib/rc/rc_tests
 	#modules/commander/commander_tests
-	#modules/controllib_test
+	#lib/controllib/controllib_test
 	#modules/mavlink/mavlink_tests
 	#modules/unit_test
 	#modules/uORB/uORB_tests
@@ -98,6 +98,7 @@ set(config_module_list
 	modules/gpio_led
 	#modules/uavcan
 	modules/land_detector
+	modules/camera_feedback
 
 	#
 	# Estimation modules
@@ -110,8 +111,10 @@ set(config_module_list
 	#
 	# Vehicle Control
 	#
-	modules/fw_pos_control_l1
 	modules/fw_att_control
+	modules/fw_pos_control_l1
+	modules/gnd_att_control
+	modules/gnd_pos_control
 	modules/mc_att_control
 	modules/mc_pos_control
 	modules/vtol_att_control
@@ -143,6 +146,7 @@ set(config_module_list
 	lib/geo_lookup
 	lib/conversion
 	lib/launchdetection
+	lib/led
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery

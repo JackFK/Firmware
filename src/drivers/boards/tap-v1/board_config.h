@@ -200,7 +200,7 @@
 #define GPIO_OTGFS_VBUS (GPIO_INPUT|GPIO_FLOAT|GPIO_PORTA|GPIO_PIN9)
 
 #define RC_SERIAL_PORT		"/dev/ttyS5"
-#define INVERT_RC_INPUT(_s)		while(0)
+#define INVERT_RC_INPUT(_invert_true)		while(0)
 
 /* High-resolution timer
  */
@@ -221,6 +221,7 @@
 
 #define BOARD_HAS_PWM	DIRECT_PWM_OUTPUT_CHANNELS
 
+#define BOARD_HAS_POWER_CONTROL	1
 
 /* This board provides a DMA pool and APIs */
 
@@ -340,16 +341,6 @@ void board_pwr_init(int stage);
  ****************************************************************************/
 
 bool board_pwr_button_down(void);
-
-/****************************************************************************
- * Name: board_pwr
- *
- * Description:
- *   Called to turn on or off the TAP
- *
- ****************************************************************************/
-
-void board_pwr(bool on_not_off);
 
 #include "../common/board_common.h"
 
